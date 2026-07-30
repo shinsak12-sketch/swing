@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Golf ball -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,30m-15,0a15,15 0,1 1,30 0a15,15 0,1 1,-30 0" />
+    <!-- Dimples -->
+    <path android:fillColor="#DDE7E0" android:pathData="M49,26m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-4 0" />
+    <path android:fillColor="#DDE7E0" android:pathData="M59,26m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-4 0" />
+    <path android:fillColor="#DDE7E0" android:pathData="M54,33m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-4 0" />
+    <!-- Tee -->
+    <path
+        android:fillColor="#F2C14E"
+        android:pathData="M50,46 L58,46 L55,60 L53,60 Z" />
+    <!-- Ground line -->
+    <path
+        android:fillColor="#F2C14E"
+        android:pathData="M40,62 L68,62 L68,66 L40,66 Z" />
+</vector>
