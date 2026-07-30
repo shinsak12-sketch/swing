@@ -2,21 +2,23 @@
     <string name="app_name">스윙시뮬</string>
 
     <!-- Import -->
-    <string name="import_hint">기본 카메라의 슈퍼슬로우로 촬영한 스윙 영상을 불러오면, 프레임을 하나씩 넘겨보며 임팩트를 분석할 수 있어요.</string>
+    <string name="import_hint">기본 카메라의 슈퍼슬로우로 정면에서 찍은 스윙 영상을 불러오면, 앱이 자동으로 임팩트를 찾아 어택앵글·발사각을 분석합니다.</string>
     <string name="import_video">슈퍼슬로우 영상 불러오기</string>
 
     <!-- Analysis -->
     <string name="analysis">스윙 분석</string>
     <string name="back">뒤로</string>
-    <string name="prev_frame">이전 프레임</string>
-    <string name="next_frame">다음 프레임</string>
+    <string name="analyzing">스윙을 분석하는 중…</string>
+    <string name="impact">임팩트</string>
+    <string name="impact_frame">임팩트 프레임</string>
+    <string name="no_overlay">임팩트 프레임을 표시할 수 없어요.</string>
 
-    <!-- Timing report -->
-    <string name="timing_report">타이밍 리포트</string>
-    <string name="frame_count">프레임 수</string>
-    <string name="duration">영상 길이</string>
-    <string name="avg_fps">평균 fps</string>
-    <string name="frame_gap">프레임 간격</string>
-    <string name="current_pts">현재 프레임 시각</string>
-    <string name="slow_segment">슬로우 구간</string>
+    <!-- Metrics -->
+    <string name="attack_angle">어택앵글</string>
+    <string name="launch_angle">발사각</string>
+    <string name="down_blow_yes">다운블로 (찍어치기)</string>
+    <string name="down_blow_no">어퍼블로 (쓸어치기)</string>
+
+    <string name="overlay_legend">초록=공, 노랑=헤드 궤적, 하늘=볼 비행. 음수 어택앵글이면 다운블로입니다.</string>
+    <string name="diagnostics">진단</string>
 </resources>

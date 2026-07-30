@@ -1,104 +1,120 @@
 package com.swingsimul.app.ui.analysis
 
 import android.app.Application
-import android.media.MediaMetadataRetriever
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.PointF
 import android.net.Uri
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.swingsimul.app.analysis.VideoTimingAnalyzer
-import com.swingsimul.app.data.VideoTiming
+import com.swingsimul.app.analysis.SwingAnalyzer
+import com.swingsimul.app.data.SwingAnalysis
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 data class AnalysisUiState(
     val loading: Boolean = true,
+    val progress: Float = 0f,
     val error: String? = null,
-    val timing: VideoTiming? = null,
-    val frameIndex: Int = 0,
-    val frame: ImageBitmap? = null,
+    val analysis: SwingAnalysis? = null,
+    val overlay: ImageBitmap? = null,
 )
 
 class AnalysisViewModel(app: Application) : AndroidViewModel(app) {
 
+    private val analyzer = SwingAnalyzer(app)
+
     private val _state = MutableStateFlow(AnalysisUiState())
     val state: StateFlow<AnalysisUiState> = _state.asStateFlow()
 
-    private val retrieverLock = Mutex()
-    private var retriever: MediaMetadataRetriever? = null
-    private var loaded = false
+    private var started = false
 
     fun load(uriString: String) {
-        if (loaded) return
-        loaded = true
+        if (started) return
+        started = true
         val uri = Uri.parse(uriString)
         viewModelScope.launch {
-            _state.value = AnalysisUiState(loading = true)
+            _state.value = AnalysisUiState(loading = true, progress = 0f)
             try {
-                val timing = VideoTimingAnalyzer.analyze(getApplication(), uri)
-                retrieverLock.withLock {
-                    retriever = MediaMetadataRetriever().apply {
-                        setDataSource(getApplication(), uri)
-                    }
+                val analysis = analyzer.analyze(uri) { p ->
+                    _state.value = _state.value.copy(progress = p)
                 }
-                val first = decodeFrame(0)
+                val overlay = withContext(Dispatchers.IO) { buildOverlay(uri, analysis) }
                 _state.value = AnalysisUiState(
                     loading = false,
-                    timing = timing,
-                    frameIndex = 0,
-                    frame = first,
+                    analysis = analysis,
+                    overlay = overlay,
                 )
             } catch (e: Exception) {
                 _state.value = AnalysisUiState(
                     loading = false,
-                    error = e.message ?: "영상을 불러오지 못했습니다.",
+                    error = e.message ?: "분석에 실패했습니다.",
                 )
             }
         }
     }
 
-    fun step(delta: Int) {
-        val timing = _state.value.timing ?: return
-        val target = (_state.value.frameIndex + delta)
-            .coerceIn(0, (timing.frameCount - 1).coerceAtLeast(0))
-        setIndex(target)
-    }
+    private fun buildOverlay(uri: Uri, analysis: SwingAnalysis): ImageBitmap? {
+        val frame = analyzer.decodeFrame(uri, analysis.impactFrame) ?: return null
+        val canvasBmp = frame.copy(Bitmap.Config.ARGB_8888, true) ?: return null
+        if (canvasBmp != frame) frame.recycle()
 
-    fun setIndex(index: Int) {
-        val timing = _state.value.timing ?: return
-        val clamped = index.coerceIn(0, (timing.frameCount - 1).coerceAtLeast(0))
-        _state.value = _state.value.copy(frameIndex = clamped)
-        viewModelScope.launch {
-            val bmp = decodeFrame(clamped)
-            // Guard against out-of-order decodes overwriting a newer index.
-            if (_state.value.frameIndex == clamped) {
-                _state.value = _state.value.copy(frame = bmp)
+        val sx = canvasBmp.width.toFloat() / analysis.analysisWidth
+        val sy = canvasBmp.height.toFloat() / analysis.analysisHeight
+        val stroke = (canvasBmp.width / 240f).coerceAtLeast(2f)
+        val canvas = Canvas(canvasBmp)
+
+        // Ball
+        analysis.ballCenter?.let { c ->
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.rgb(80, 220, 120)
+                style = Paint.Style.STROKE
+                strokeWidth = stroke
             }
+            canvas.drawCircle(c.x * sx, c.y * sy, analysis.ballRadius * sx + stroke, paint)
         }
+
+        drawPath(canvas, analysis.clubPath, sx, sy, Color.rgb(245, 200, 70), stroke)   // club: yellow
+        drawPath(canvas, analysis.ballPath, sx, sy, Color.rgb(90, 200, 240), stroke)   // ball flight: cyan
+
+        return canvasBmp.asImageBitmap()
     }
 
-    private suspend fun decodeFrame(index: Int): ImageBitmap? = withContext(Dispatchers.IO) {
-        retrieverLock.withLock {
-            val r = retriever ?: return@withContext null
-            try {
-                r.getFrameAtIndex(index)?.asImageBitmap()
-            } catch (e: Exception) {
-                null
-            }
+    private fun drawPath(
+        canvas: Canvas,
+        points: List<PointF>,
+        sx: Float,
+        sy: Float,
+        color: Int,
+        stroke: Float,
+    ) {
+        if (points.isEmpty()) return
+        val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+            style = Paint.Style.STROKE
+            strokeWidth = stroke
         }
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        val r = retriever
-        retriever = null
-        r?.release()
+        val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+            style = Paint.Style.FILL
+        }
+        for (i in 1 until points.size) {
+            canvas.drawLine(
+                points[i - 1].x * sx, points[i - 1].y * sy,
+                points[i].x * sx, points[i].y * sy,
+                line,
+            )
+        }
+        for (p in points) {
+            canvas.drawCircle(p.x * sx, p.y * sy, stroke * 1.6f, dot)
+        }
     }
 }
