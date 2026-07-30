@@ -2,17 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-feature
-        android:name="android.hardware.camera.any"
-        android:required="true" />
-
-    <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-
-    <!-- Scoped storage: legacy WRITE only needed pre-Q -->
-    <uses-permission
-        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28" />
+    <!--
+        This build analyzes super-slow-motion clips recorded by the stock camera
+        app and imported through the system photo picker, so it needs no camera
+        or storage permission of its own.
+    -->
 
     <application
         android:name=".SwingSimulApp"

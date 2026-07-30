@@ -1,51 +1,50 @@
 # 스윙시뮬 (SwingSimul)
 
-카메라 **슬로우모션**으로 골프 스윙을 촬영하고, 느린 속도·프레임 단위로 되돌려 보며 자세를 분석하는 안드로이드 앱입니다.
+폰 카메라의 **초슬로우(슈퍼슬로우) 영상**으로 골프 스윙을 찍어, 포토메트릭 방식 론치모니터처럼
+임팩트 순간의 **각도 지표**(어택앵글/다운블로, 다이나믹 로프트 등)를 추정하는 것을 목표로 하는
+안드로이드 앱입니다.
 
-Kotlin + Jetpack Compose로 작성되었으며, 촬영은 **CameraX**, 슬로우 재생은 **Media3(ExoPlayer)** 를 사용합니다.
+Kotlin + Jetpack Compose로 작성합니다. 대상 기기는 **Galaxy S26 Ultra**.
 
-## 주요 기능
+## 설계 결정
 
-- 📹 **스윙 촬영** — CameraX 기반 후면/전면 카메라 전환, 최고 화질(FHD→HD→SD 폴백) 녹화
-- 🐢 **슬로우 재생** — 0.25x / 0.5x / 1x 배속으로 스윙을 천천히 재생
-- 🎞️ **프레임 단위 분석** — 이전/다음 프레임 버튼으로 임팩트 순간을 한 컷씩 확인
-- 🗂️ **보관함** — 촬영한 스윙을 썸네일 그리드로 모아 보고 재생·삭제
-- 🔐 카메라·마이크 권한을 앱 안에서 자연스럽게 요청
+- **카메라 위치: 정면(페이스온).** 단일 카메라는 2D 투영이라, 화면에 담는 평면이 측정 가능한
+  지표를 결정합니다. 정면은 임팩트의 수직면(타깃선–상하)을 화면에 담아 어택앵글 · 다운블로 ·
+  다이나믹 로프트 · 발사각을 그대로 투영합니다. 스윙패스(인–아웃)와 페이스 여닫힘은 단일 카메라의
+  근본 한계라, 추후 **2번째 카메라(뒤/위)** 로 확장할 몫으로 둡니다.
+- **캡처는 기본 카메라의 슈퍼슬로우(960fps)를 활용.** 앱 코드(Camera2/CameraX)로는 보통
+  120/240fps까지만 접근되어 임팩트 구간이 1~2프레임에 그칩니다. 그래서 기본 카메라앱으로 촬영한
+  슈퍼슬로우 클립을 **시스템 사진 선택기로 불러와** 프레임을 분석합니다. (카메라/저장소 권한 불필요)
 
-> 촬영은 기기가 지원하는 최고 화질로 저장하고, "슬로우모션" 효과는 재생 단계에서 배속·프레임 스텝으로 구현합니다. 추후 기기별 고프레임(120/240fps) 캡처 API를 붙이면 촬영 자체의 슬로우모션도 확장할 수 있습니다.
+## 현재 구현 (1단계: 불러오기 + 프레임/타이밍 검증)
 
-## 기술 스택
+가장 큰 미지수인 **"불러온 슈퍼슬로우 클립이 실제로 어떤 프레임/타이밍 구조인가"** 부터 깨는 단계입니다.
 
-| 영역 | 사용 기술 |
-|------|-----------|
-| 언어 | Kotlin 2.0 |
-| UI | Jetpack Compose (Material 3) |
-| 촬영 | CameraX 1.4 (`camera-video`, `camera-view`) |
-| 재생 | Media3 ExoPlayer 1.5 |
-| 네비게이션 | Navigation Compose |
-| 권한 | Accompanist Permissions |
-| 썸네일 | Coil (video frame decoder) |
-| 빌드 | AGP 8.7, Gradle 8.14 |
+- 🎞️ **영상 불러오기** — 시스템 사진 선택기(Photo Picker)로 슈퍼슬로우 영상 선택
+- 🔍 **프레임 단위 뷰어** — 슬라이더 + 이전/다음 버튼으로 임팩트를 한 컷씩 탐색
+- 📊 **타이밍 리포트** — 프레임 수, 영상 길이, 평균 fps, 프레임 간격(중앙값/최소/최대),
+  그리고 **슬로우 구간 자동 감지**(고프레임 구간의 추정 fps). `MediaExtractor`로 각 프레임의
+  presentation timestamp(PTS)를 디코딩 없이 읽어 실제 타이밍 구조를 드러냅니다.
+
+> 이 리포트로 확인할 것: S26 Ultra의 슈퍼슬로우 클립이 (a) 실제 960fps 타이밍을 PTS에 보존하는지,
+> 아니면 (b) 이미 30fps로 시간 확장된 상태인지. 이에 따라 이후 각도/속도 계산의 시간 기준이 정해집니다.
 
 ## 프로젝트 구조
 
 ```
 app/src/main/java/com/swingsimul/app/
-├── MainActivity.kt          # 진입점, Compose 세팅
-├── SwingSimulApp.kt         # Application
+├── MainActivity.kt              # 진입점, Compose 세팅
+├── SwingSimulApp.kt             # Application
 ├── data/
-│   ├── Recording.kt         # 스윙 영상 모델
-│   └── RecordingRepository.kt  # 앱 전용 저장소 파일 관리
+│   └── VideoTiming.kt           # 프레임 PTS/간격/슬로우 구간 모델
+├── analysis/
+│   └── VideoTimingAnalyzer.kt   # MediaExtractor로 프레임 타이밍 추출
 └── ui/
-    ├── SwingSimulNavHost.kt # 화면 네비게이션
-    ├── theme/               # 색상·타이포·테마
-    ├── camera/              # 촬영 화면 + ViewModel (CameraX)
-    ├── playback/            # 슬로우 재생/분석 화면 (Media3)
-    └── gallery/             # 보관함 화면 + ViewModel
+    ├── SwingSimulNavHost.kt     # import → analysis 네비게이션
+    ├── theme/                   # 색상·타이포·테마
+    ├── importer/ImportScreen.kt # 영상 불러오기
+    └── analysis/                # 프레임 뷰어 + 타이밍 리포트 + ViewModel
 ```
-
-영상은 저장소 권한이 필요 없는 앱 전용 외부 저장소
-(`Android/data/com.swingsimul.app/files/Movies/swings/`)에 `.mp4`로 저장됩니다.
 
 ## 빌드 & 실행
 
@@ -53,16 +52,16 @@ Android Studio(Ladybug 이상 권장)에서 열거나, Android SDK가 설정된 
 
 ```bash
 ./gradlew :app:assembleDebug        # 디버그 APK 빌드
-./gradlew :app:installDebug         # 연결된 기기/에뮬레이터에 설치
+./gradlew :app:installDebug         # 연결된 기기에 설치
 ```
 
-- **minSdk 24 / targetSdk 35**
-- 최초 실행 시 카메라·마이크 권한을 허용해야 촬영 화면이 동작합니다.
-- 실기기 촬영을 권장합니다(에뮬레이터는 가상 카메라라 스윙 분석 확인이 제한적).
+- **minSdk 28 / targetSdk 35** (`getFrameAtIndex` 프레임 인덱스 디코딩에 API 28 필요)
+- 실기기(S26 Ultra) 권장. 먼저 기본 카메라의 슈퍼슬로우로 스윙을 찍고, 앱에서 그 영상을 불러오세요.
 
-## 로드맵 (아이디어)
+## 로드맵
 
-- [ ] 고프레임(슬로우모션) 하드웨어 캡처 지원
-- [ ] 스윙 궤적/임팩트 자동 감지 및 마커
-- [ ] 두 스윙 나란히 비교(레퍼런스 vs 내 스윙)
-- [ ] 자세 추정(ML Kit Pose)으로 각도 오버레이
+- [x] 1단계 — 슈퍼슬로우 불러오기 + 프레임 뷰어 + 타이밍 리포트
+- [ ] 2단계 — 스케일 기준(공 지름 42.67mm) + 임팩트 프레임 마킹
+- [ ] 3단계 — 헤드 궤적 추적 → **어택앵글 / 다운블로** 추정
+- [ ] 4단계 — 다이나믹 로프트, 발사각
+- [ ] (확장) 2번째 카메라로 스윙패스 · 페이스 여닫힘

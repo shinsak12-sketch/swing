@@ -10,7 +10,8 @@ android {
 
     defaultConfig {
         applicationId = "com.swingsimul.app"
-        minSdk = 24
+        // getFrameAtIndex / getFramesAtIndex require API 28.
+        minSdk = 28
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
@@ -60,24 +61,6 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.material.icons.extended)
     implementation(libs.androidx.navigation.compose)
-
-    // CameraX
-    implementation(libs.androidx.camera.core)
-    implementation(libs.androidx.camera.camera2)
-    implementation(libs.androidx.camera.lifecycle)
-    implementation(libs.androidx.camera.video)
-    implementation(libs.androidx.camera.view)
-
-    // Media3 (ExoPlayer) for slow-motion playback
-    implementation(libs.androidx.media3.exoplayer)
-    implementation(libs.androidx.media3.ui)
-
-    // Runtime permissions
-    implementation(libs.accompanist.permissions)
-
-    // Thumbnails
-    implementation(libs.coil.compose)
-    implementation(libs.coil.video)
 
     debugImplementation(libs.androidx.ui.tooling)
 }

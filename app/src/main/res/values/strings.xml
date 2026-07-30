@@ -1,26 +1,22 @@
 <resources>
     <string name="app_name">스윙시뮬</string>
 
-    <!-- Camera -->
-    <string name="record">촬영</string>
-    <string name="stop">정지</string>
-    <string name="switch_camera">카메라 전환</string>
-    <string name="gallery">보관함</string>
-    <string name="recording">녹화 중…</string>
+    <!-- Import -->
+    <string name="import_hint">기본 카메라의 슈퍼슬로우로 촬영한 스윙 영상을 불러오면, 프레임을 하나씩 넘겨보며 임팩트를 분석할 수 있어요.</string>
+    <string name="import_video">슈퍼슬로우 영상 불러오기</string>
 
-    <!-- Permissions -->
-    <string name="permission_title">카메라 권한이 필요해요</string>
-    <string name="permission_rationale">스윙 촬영을 위해 카메라와 마이크 접근 권한이 필요합니다.</string>
-    <string name="grant_permission">권한 허용</string>
-
-    <!-- Playback -->
-    <string name="playback">스윙 분석</string>
-    <string name="speed">속도</string>
+    <!-- Analysis -->
+    <string name="analysis">스윙 분석</string>
+    <string name="back">뒤로</string>
     <string name="prev_frame">이전 프레임</string>
     <string name="next_frame">다음 프레임</string>
-    <string name="play_pause">재생/일시정지</string>
-    <string name="delete">삭제</string>
 
-    <!-- Gallery -->
-    <string name="no_recordings">아직 촬영한 스윙이 없어요.\n촬영 버튼으로 첫 스윙을 담아보세요.</string>
+    <!-- Timing report -->
+    <string name="timing_report">타이밍 리포트</string>
+    <string name="frame_count">프레임 수</string>
+    <string name="duration">영상 길이</string>
+    <string name="avg_fps">평균 fps</string>
+    <string name="frame_gap">프레임 간격</string>
+    <string name="current_pts">현재 프레임 시각</string>
+    <string name="slow_segment">슬로우 구간</string>
 </resources>
