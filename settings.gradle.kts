@@ -21,3 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "SwingSimul"
 include(":app")
+include(":score")

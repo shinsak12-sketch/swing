@@ -12,6 +12,7 @@ local.properties
 # Android Studio
 *.hprof
 /app/build/
+/score/build/
 /app/release/
 
 # Keystores

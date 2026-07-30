@@ -1,0 +1,52 @@
+name: Build Score APK
+
+on:
+  push:
+    branches:
+      - claude/score-capture-auto-recognition-wr0ydn
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      - name: Build debug APK
+        run: ./gradlew :score:assembleDebug --stacktrace
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: swing-score-debug-apk
+          path: score/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: Publish to a rolling pre-release (easy phone download)
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: score-apk-latest
+          name: 스윙 스코어 최신 디버그 APK
+          prerelease: true
+          files: score/build/outputs/apk/debug/*.apk
+          body: |
+            스윙 스코어 디버그 APK (자동 빌드).
+            아래 score-debug.apk 를 폰에서 받아 설치하세요.
+            (출처 불명 앱 설치 허용이 필요할 수 있습니다.)
