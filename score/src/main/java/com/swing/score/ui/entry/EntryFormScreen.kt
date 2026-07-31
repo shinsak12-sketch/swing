@@ -43,13 +43,13 @@ import coil.compose.AsyncImage
 import com.swing.score.domain.Round
 import com.swing.score.domain.RoundRepository
 import com.swing.score.domain.RoundSource
+import com.swing.score.domain.StandardPars
 import com.swing.score.ocr.ScorecardRecognizer
 import com.swing.score.ui.components.ConvexCard
+import com.swing.score.ui.components.RelStepper
 import com.swing.score.ui.components.ScoreMark
 import com.swing.score.ui.components.Stepper
 import java.time.LocalDate
-
-private val DEFAULT_PARS = listOf(4, 4, 3, 4, 5, 4, 4, 3, 5) + listOf(4, 4, 3, 4, 5, 4, 4, 3, 5)
 
 @Composable
 fun EntryFormScreen(
@@ -63,11 +63,15 @@ fun EntryFormScreen(
     val editing = initialRound != null
 
     var courseName by remember { mutableStateOf(initialRound?.courseName ?: "") }
-    val pars = remember { mutableStateListOf(*(initialRound?.pars ?: DEFAULT_PARS).toTypedArray()) }
-    val strokes = remember { mutableStateListOf(*(initialRound?.strokes ?: DEFAULT_PARS).toTypedArray()) }
+    val pars = remember { mutableStateListOf(*(initialRound?.pars ?: StandardPars).toTypedArray()) }
+    // Par-relative scores: par = 0, birdie = -1, bogey = +1…
+    val rels = remember {
+        val initial = initialRound?.let { r -> r.strokes.mapIndexed { i, s -> s - r.pars[i] } }
+            ?: List(pars.size) { 0 }
+        mutableStateListOf(*initial.toTypedArray())
+    }
     val today = remember { LocalDate.now().toString().replace('-', '.') }
 
-    // capture recognition state
     var recognizing by remember { mutableStateOf(isCapture && !editing) }
     var recogFailed by remember { mutableStateOf(false) }
     var checksumOk by remember { mutableStateOf<Boolean?>(null) }
@@ -83,7 +87,7 @@ fun EntryFormScreen(
             val result = ScorecardRecognizer.recognize(context, uri)
             if (result.success && result.pars.isNotEmpty()) {
                 pars.clear(); pars.addAll(result.pars)
-                strokes.clear(); strokes.addAll(result.strokes)
+                rels.clear(); rels.addAll(result.strokes.mapIndexed { i, s -> s - result.pars[i] })
                 checksumOk = result.checksumOk
             } else {
                 recogFailed = true
@@ -92,8 +96,8 @@ fun EntryFormScreen(
         }
     }
 
-    val total = strokes.sum()
-    val toPar = total - pars.sum()
+    val toPar = rels.sum()
+    val total = pars.indices.sumOf { pars[it] + rels[it] }
 
     Column(
         Modifier
@@ -148,9 +152,16 @@ fun EntryFormScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("합계", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                Column {
+                    Text("합계", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                    Text(
+                        "파 대비 기준으로 입력 (파 = E)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Text(
-                    "$total  (${if (toPar > 0) "+$toPar" else toPar})",
+                    "$total  (${if (toPar > 0) "+$toPar" else if (toPar == 0) "E" else "$toPar"})",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.primary,
@@ -160,13 +171,24 @@ fun EntryFormScreen(
 
         ConvexCard(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(vertical = 4.dp)) {
-                for (i in strokes.indices) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("홀", Modifier.width(40.dp), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Box(Modifier.size(30.dp))
+                    Text("PAR", Modifier.weight(1f), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("파 대비", Modifier.weight(1f), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                for (i in rels.indices) {
                     HoleRow(
                         hole = i + 1,
                         par = pars[i],
-                        stroke = strokes[i],
+                        rel = rels[i],
                         onPar = { pars[i] = it },
-                        onStroke = { strokes[i] = it },
+                        onRel = { rels[i] = it },
                         showDivider = i > 0,
                     )
                 }
@@ -174,14 +196,16 @@ fun EntryFormScreen(
         }
 
         SaveButton(if (editing) "수정 저장" else "저장하기") {
+            val strokes = pars.mapIndexed { i, p -> p + rels[i] }
             if (editing && initialRound != null) {
-                val updated = initialRound.copy(
-                    courseName = courseName.ifBlank { initialRound.courseName },
-                    pars = pars.toList(),
-                    strokes = strokes.toList(),
+                RoundRepository.update(
+                    initialRound.copy(
+                        courseName = courseName.ifBlank { initialRound.courseName },
+                        pars = pars.toList(),
+                        strokes = strokes,
+                    )
                 )
-                RoundRepository.update(updated)
-                onSaved(updated.id)
+                onSaved(initialRound.id)
             } else {
                 val round = Round(
                     id = RoundRepository.newId(),
@@ -189,7 +213,7 @@ fun EntryFormScreen(
                     subtitle = if (isCapture) "캡쳐 인식" else "수기 입력",
                     dateLabel = today,
                     pars = pars.toList(),
-                    strokes = strokes.toList(),
+                    strokes = strokes,
                     source = if (isCapture) RoundSource.Capture else RoundSource.Manual,
                 )
                 RoundRepository.add(round)
@@ -235,11 +259,7 @@ private fun RecognitionBanner(recognizing: Boolean, failed: Boolean, checksumOk:
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         if (recognizing) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(16.dp),
-                strokeWidth = 2.dp,
-                color = fg,
-            )
+            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = fg)
         }
         Text(msg, color = fg, fontSize = 12.sp)
     }
@@ -249,9 +269,9 @@ private fun RecognitionBanner(recognizing: Boolean, failed: Boolean, checksumOk:
 private fun HoleRow(
     hole: Int,
     par: Int,
-    stroke: Int,
+    rel: Int,
     onPar: (Int) -> Unit,
-    onStroke: (Int) -> Unit,
+    onRel: (Int) -> Unit,
     showDivider: Boolean,
 ) {
     if (showDivider) {
@@ -276,26 +296,11 @@ private fun HoleRow(
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
         )
-        ScoreMark(stroke = stroke, par = par, size = 26.dp)
-        Column(Modifier.weight(1f).padding(start = 6.dp)) {
-            Label("PAR")
-            Stepper(value = par, onChange = onPar, min = 3, max = 6)
-        }
-        Column(Modifier.weight(1f)) {
-            Label("타수")
-            Stepper(value = stroke, onChange = onStroke, min = 1, max = 15)
-        }
+        ScoreMark(stroke = par + rel, par = par, size = 26.dp)
+        Box(Modifier.width(4.dp))
+        Stepper(value = par, onChange = onPar, modifier = Modifier.weight(1f), min = 3, max = 6)
+        RelStepper(value = rel, onChange = onRel, modifier = Modifier.weight(1f), min = -4, max = 8)
     }
-}
-
-@Composable
-private fun Label(text: String) {
-    Text(
-        text,
-        fontSize = 10.sp,
-        fontWeight = FontWeight.SemiBold,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
 }
 
 @Composable

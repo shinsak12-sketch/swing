@@ -36,3 +36,7 @@ data class Round(
 }
 
 enum class RoundSource { Manual, Capture, Live }
+
+/** A standard 18-hole par layout (par 72) used as a sensible default. */
+val StandardPars: List<Int> =
+    listOf(4, 5, 4, 3, 4, 4, 5, 3, 4) + listOf(4, 3, 4, 5, 3, 4, 5, 4, 4)

@@ -19,6 +19,45 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.swing.score.ui.theme.LocalScorePalette
+
+/** Signed stepper for par-relative entry: par shows as "E", else +N / -N, colour-coded. */
+@Composable
+fun RelStepper(
+    value: Int,
+    onChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    min: Int = -5,
+    max: Int = 10,
+) {
+    val palette = LocalScorePalette.current
+    val label = when {
+        value == 0 -> "E"
+        value > 0 -> "+$value"
+        else -> value.toString()
+    }
+    val color = when {
+        value < 0 -> palette.under
+        value == 0 -> MaterialTheme.colorScheme.onSurface
+        else -> palette.over
+    }
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        StepButton("−", enabled = value > min) { onChange((value - 1).coerceAtLeast(min)) }
+        Text(
+            label,
+            modifier = Modifier.widthIn(min = 30.dp),
+            textAlign = TextAlign.Center,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = color,
+        )
+        StepButton("+", enabled = value < max) { onChange((value + 1).coerceAtMost(max)) }
+    }
+}
 
 @Composable
 fun Stepper(

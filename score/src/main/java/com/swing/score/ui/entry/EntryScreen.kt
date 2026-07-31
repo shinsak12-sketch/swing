@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -33,6 +34,7 @@ import com.swing.score.ui.theme.FairwayDeep
 fun EntryScreen(
     onManual: () -> Unit,
     onCapturePicked: () -> Unit,
+    onLiveGame: () -> Unit,
 ) {
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
@@ -86,6 +88,17 @@ fun EntryScreen(
             ),
             contentColor = Color.White,
             onClick = onManual,
+        )
+
+        BigChoice(
+            icon = Icons.Outlined.EmojiEvents,
+            title = "라이브 내기",
+            desc = "홀마다 입력하며 판돈이 실시간으로 정산됩니다. (스트로크·타당)",
+            gradient = Brush.linearGradient(
+                listOf(Color(0xFF2C8B5F), Color(0xFF0F4A30))
+            ),
+            contentColor = Color.White,
+            onClick = onLiveGame,
         )
 
         Text(

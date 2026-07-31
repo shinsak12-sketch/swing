@@ -22,6 +22,9 @@ import com.swing.score.domain.RoundRepository
 import com.swing.score.ui.detail.RoundDetailScreen
 import com.swing.score.ui.entry.EntryFormScreen
 import com.swing.score.ui.entry.EntryScreen
+import com.swing.score.ui.game.GameLiveScreen
+import com.swing.score.ui.game.GameSettleScreen
+import com.swing.score.ui.game.GameSetupScreen
 import com.swing.score.ui.home.HomeScreen
 import com.swing.score.ui.navigation.TopDestination
 import com.swing.score.ui.rounds.RoundsScreen
@@ -75,9 +78,28 @@ fun ScoreApp() {
                 EntryScreen(
                     onManual = { navController.navigate("form/manual") },
                     onCapturePicked = { navController.navigate("form/capture") },
+                    onLiveGame = { navController.navigate("game/setup") },
                 )
             }
             composable(TopDestination.Stats.route) { StatsScreen() }
+
+            composable("game/setup") {
+                GameSetupScreen(
+                    onStart = { navController.navigate("game/live") },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable("game/live") {
+                GameLiveScreen(
+                    onSettle = { navController.navigate("game/settle") },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable("game/settle") {
+                GameSettleScreen(
+                    onDone = { navController.navigateToTab(TopDestination.Home.route) },
+                )
+            }
 
             composable("detail/{id}") { entry ->
                 val id = entry.arguments?.getString("id").orEmpty()
