@@ -73,7 +73,7 @@ fun RoundsScreen(onOpenRound: (String) -> Unit) {
                     Icon(Icons.Outlined.Close, contentDescription = "선택 취소")
                 }
                 Text(
-                    "$selectedCount개 선택",
+                    "${selectedCount}개 선택",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onBackground,
                     modifier = Modifier.weight(1f),
