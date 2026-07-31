@@ -13,13 +13,26 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,9 +47,16 @@ import com.swing.score.ui.components.ScoreSegment
 import com.swing.score.ui.theme.FairwayDeep
 
 @Composable
-fun RoundDetailScreen(roundId: String, onBack: () -> Unit) {
-    val round = RoundRepository.find(roundId)
+fun RoundDetailScreen(
+    roundId: String,
+    onBack: () -> Unit,
+    onEdit: (String) -> Unit,
+) {
+    val rounds by RoundRepository.rounds.collectAsState()
+    val round = rounds.firstOrNull { it.id == roundId }
     val scroll = rememberScrollState()
+    var menuOpen by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
 
     Column(
         Modifier
@@ -53,6 +73,46 @@ fun RoundDetailScreen(roundId: String, onBack: () -> Unit) {
                 "라운드 상세",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground,
+            )
+            Spacer(Modifier.weight(1f))
+            if (round != null) {
+                Box {
+                    IconButton(onClick = { menuOpen = true }) {
+                        Icon(Icons.Rounded.MoreVert, contentDescription = "메뉴")
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("수정") },
+                            leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null) },
+                            onClick = { menuOpen = false; onEdit(round.id) },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("삭제") },
+                            leadingIcon = {
+                                Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                            },
+                            onClick = { menuOpen = false; confirmDelete = true },
+                        )
+                    }
+                }
+            }
+        }
+
+        if (confirmDelete && round != null) {
+            AlertDialog(
+                onDismissRequest = { confirmDelete = false },
+                title = { Text("라운드 삭제") },
+                text = { Text("${round.courseName} 기록을 삭제할까요?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        confirmDelete = false
+                        RoundRepository.delete(round.id)
+                        onBack()
+                    }) { Text("삭제", color = MaterialTheme.colorScheme.error) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmDelete = false }) { Text("취소") }
+                },
             )
         }
 

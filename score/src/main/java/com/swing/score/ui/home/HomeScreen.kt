@@ -48,7 +48,8 @@ fun HomeScreen(
     val rounds by RoundRepository.rounds.collectAsState()
 
     val average = rounds.map { it.total }.takeIf { it.isNotEmpty() }?.average()?.let { Math.round(it).toInt() }
-    val best = rounds.minOfOrNull { it.total }
+    val bestRound = rounds.minByOrNull { it.total }
+    val best = bestRound?.total
     val trend = rounds.map { it.total }.asReversed()
 
     Column(
@@ -74,7 +75,9 @@ fun HomeScreen(
 
         Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
             Kpi(Modifier.weight(1f), "평균", average?.toString() ?: "-", onOpenStats)
-            Kpi(Modifier.weight(1f), "베스트", best?.toString() ?: "-", onOpenStats)
+            Kpi(Modifier.weight(1f), "베스트", best?.toString() ?: "-") {
+                bestRound?.let { onOpenRound(it.id) }
+            }
             Kpi(Modifier.weight(1f), "핸디캡", "22.4", onOpenStats)
         }
 

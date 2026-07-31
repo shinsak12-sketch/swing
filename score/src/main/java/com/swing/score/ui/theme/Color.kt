@@ -24,9 +24,11 @@ val LineDark = Color(0xFF2C3B33)
 val FairwayLight = Color(0xFF7FD9AE)
 
 // Score coding (relative to par)
-val ScoreBirdie = Color(0xFFE0483D) // birdie or better
-val ScoreBogey = Color(0xFFE89029)  // bogey
-val ScoreDouble = Color(0xFF7C5BD6) // double bogey or worse
+val ScoreBirdie = Color(0xFFE0483D) // under par — red circles (PGA style)
+val ScoreBogey = Color(0xFFE89029)  // used for +N labels/badges
+val ScoreDouble = Color(0xFF7C5BD6)
+val ScoreOver = Color(0xFF2F6BE0)   // over par — blue squares (PGA style)
+val ScoreOnion = Color(0xFF4A3B6B)  // double-par ("양파") — filled marker
 
 // Convex card surfaces
 val CardTopLight = Color(0xFFFFFFFF)

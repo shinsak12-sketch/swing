@@ -10,18 +10,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -32,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,7 +43,9 @@ import coil.compose.AsyncImage
 import com.swing.score.domain.Round
 import com.swing.score.domain.RoundRepository
 import com.swing.score.domain.RoundSource
+import com.swing.score.ocr.ScorecardRecognizer
 import com.swing.score.ui.components.ConvexCard
+import com.swing.score.ui.components.ScoreMark
 import com.swing.score.ui.components.Stepper
 import java.time.LocalDate
 
@@ -48,14 +54,43 @@ private val DEFAULT_PARS = listOf(4, 4, 3, 4, 5, 4, 4, 3, 5) + listOf(4, 4, 3, 4
 @Composable
 fun EntryFormScreen(
     isCapture: Boolean,
+    initialRound: Round?,
     onSaved: (String) -> Unit,
     onBack: () -> Unit,
 ) {
+    val context = LocalContext.current
     val scroll = rememberScrollState()
-    var courseName by remember { mutableStateOf("") }
-    val pars = remember { mutableStateListOf(*DEFAULT_PARS.toTypedArray()) }
-    val strokes = remember { mutableStateListOf(*DEFAULT_PARS.toTypedArray()) }
+    val editing = initialRound != null
+
+    var courseName by remember { mutableStateOf(initialRound?.courseName ?: "") }
+    val pars = remember { mutableStateListOf(*(initialRound?.pars ?: DEFAULT_PARS).toTypedArray()) }
+    val strokes = remember { mutableStateListOf(*(initialRound?.strokes ?: DEFAULT_PARS).toTypedArray()) }
     val today = remember { LocalDate.now().toString().replace('-', '.') }
+
+    // capture recognition state
+    var recognizing by remember { mutableStateOf(isCapture && !editing) }
+    var recogFailed by remember { mutableStateOf(false) }
+    var checksumOk by remember { mutableStateOf<Boolean?>(null) }
+
+    if (isCapture && !editing) {
+        LaunchedEffect(Unit) {
+            val uri = CaptureDraft.uri
+            if (uri == null) {
+                recognizing = false
+                recogFailed = true
+                return@LaunchedEffect
+            }
+            val result = ScorecardRecognizer.recognize(context, uri)
+            if (result.success && result.pars.isNotEmpty()) {
+                pars.clear(); pars.addAll(result.pars)
+                strokes.clear(); strokes.addAll(result.strokes)
+                checksumOk = result.checksumOk
+            } else {
+                recogFailed = true
+            }
+            recognizing = false
+        }
+    }
 
     val total = strokes.sum()
     val toPar = total - pars.sum()
@@ -72,13 +107,17 @@ fun EntryFormScreen(
                 Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "뒤로")
             }
             Text(
-                if (isCapture) "인식 결과 확인" else "수기 입력",
+                when {
+                    editing -> "라운드 수정"
+                    isCapture -> "인식 결과 확인"
+                    else -> "수기 입력"
+                },
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground,
             )
         }
 
-        if (isCapture) {
+        if (isCapture && !editing) {
             CaptureDraft.uri?.let { uri ->
                 AsyncImage(
                     model = uri,
@@ -90,19 +129,7 @@ fun EntryFormScreen(
                         .clip(RoundedCornerShape(14.dp)),
                 )
             }
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.primaryContainer)
-                    .padding(12.dp),
-            ) {
-                Text(
-                    "이미지 자동 인식 엔진은 다음 단계에서 연결됩니다.\n지금은 홀별 값을 직접 확인·입력해 주세요.",
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    fontSize = 12.sp,
-                )
-            }
+            RecognitionBanner(recognizing, recogFailed, checksumOk)
         }
 
         OutlinedTextField(
@@ -113,7 +140,6 @@ fun EntryFormScreen(
             modifier = Modifier.fillMaxWidth(),
         )
 
-        // Live total
         ConvexCard(modifier = Modifier.fillMaxWidth()) {
             Row(
                 Modifier
@@ -132,7 +158,6 @@ fun EntryFormScreen(
             }
         }
 
-        // Hole rows
         ConvexCard(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(vertical = 4.dp)) {
                 for (i in strokes.indices) {
@@ -148,21 +173,75 @@ fun EntryFormScreen(
             }
         }
 
-        SaveButton {
-            val round = Round(
-                id = RoundRepository.newId(),
-                courseName = courseName.ifBlank { "내 라운드" },
-                subtitle = if (isCapture) "캡쳐 인식" else "수기 입력",
-                dateLabel = today,
-                pars = pars.toList(),
-                strokes = strokes.toList(),
-                source = if (isCapture) RoundSource.Capture else RoundSource.Manual,
-            )
-            RoundRepository.add(round)
-            onSaved(round.id)
+        SaveButton(if (editing) "수정 저장" else "저장하기") {
+            if (editing && initialRound != null) {
+                val updated = initialRound.copy(
+                    courseName = courseName.ifBlank { initialRound.courseName },
+                    pars = pars.toList(),
+                    strokes = strokes.toList(),
+                )
+                RoundRepository.update(updated)
+                onSaved(updated.id)
+            } else {
+                val round = Round(
+                    id = RoundRepository.newId(),
+                    courseName = courseName.ifBlank { "내 라운드" },
+                    subtitle = if (isCapture) "캡쳐 인식" else "수기 입력",
+                    dateLabel = today,
+                    pars = pars.toList(),
+                    strokes = strokes.toList(),
+                    source = if (isCapture) RoundSource.Capture else RoundSource.Manual,
+                )
+                RoundRepository.add(round)
+                onSaved(round.id)
+            }
         }
 
         Box(Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun RecognitionBanner(recognizing: Boolean, failed: Boolean, checksumOk: Boolean?) {
+    val (bg, fg, msg) = when {
+        recognizing -> Triple(
+            MaterialTheme.colorScheme.surfaceVariant,
+            MaterialTheme.colorScheme.onSurfaceVariant,
+            "캡쳐를 인식하는 중…",
+        )
+        failed -> Triple(
+            MaterialTheme.colorScheme.errorContainer,
+            MaterialTheme.colorScheme.onErrorContainer,
+            "자동 인식에 실패했어요. 홀별 값을 직접 입력해 주세요.",
+        )
+        checksumOk == true -> Triple(
+            MaterialTheme.colorScheme.primaryContainer,
+            MaterialTheme.colorScheme.onPrimaryContainer,
+            "합계 검산 통과 · 값을 한 번 확인하세요.",
+        )
+        else -> Triple(
+            MaterialTheme.colorScheme.surfaceVariant,
+            MaterialTheme.colorScheme.onSurfaceVariant,
+            "인식 완료 · 합계가 애매해요. 홀별로 확인해 주세요.",
+        )
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(bg)
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        if (recognizing) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                strokeWidth = 2.dp,
+                color = fg,
+            )
+        }
+        Text(msg, color = fg, fontSize = 12.sp)
     }
 }
 
@@ -192,12 +271,13 @@ private fun HoleRow(
     ) {
         Text(
             "${hole}번",
-            modifier = Modifier.width(44.dp),
+            modifier = Modifier.width(40.dp),
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
         )
-        Column(Modifier.weight(1f)) {
+        ScoreMark(stroke = stroke, par = par, size = 26.dp)
+        Column(Modifier.weight(1f).padding(start = 6.dp)) {
             Label("PAR")
             Stepper(value = par, onChange = onPar, min = 3, max = 6)
         }
@@ -219,7 +299,7 @@ private fun Label(text: String) {
 }
 
 @Composable
-private fun SaveButton(onClick: () -> Unit) {
+private fun SaveButton(label: String, onClick: () -> Unit) {
     Box(
         Modifier
             .fillMaxWidth()
@@ -229,6 +309,6 @@ private fun SaveButton(onClick: () -> Unit) {
             .padding(vertical = 15.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text("저장하기", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
+        Text(label, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.ExtraBold)
     }
 }

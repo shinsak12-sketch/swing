@@ -18,6 +18,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.swing.score.domain.RoundRepository
 import com.swing.score.ui.detail.RoundDetailScreen
 import com.swing.score.ui.entry.EntryFormScreen
 import com.swing.score.ui.entry.EntryScreen
@@ -80,17 +81,32 @@ fun ScoreApp() {
 
             composable("detail/{id}") { entry ->
                 val id = entry.arguments?.getString("id").orEmpty()
-                RoundDetailScreen(roundId = id, onBack = { navController.popBackStack() })
+                RoundDetailScreen(
+                    roundId = id,
+                    onBack = { navController.popBackStack() },
+                    onEdit = { editId -> navController.navigate("edit/$editId") },
+                )
             }
             composable("form/{mode}") { entry ->
                 val isCapture = entry.arguments?.getString("mode") == "capture"
                 EntryFormScreen(
                     isCapture = isCapture,
+                    initialRound = null,
                     onSaved = { id ->
                         navController.navigate("detail/$id") {
                             popUpTo(TopDestination.Home.route)
                         }
                     },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable("edit/{id}") { entry ->
+                val id = entry.arguments?.getString("id").orEmpty()
+                val round = RoundRepository.find(id)
+                EntryFormScreen(
+                    isCapture = false,
+                    initialRound = round,
+                    onSaved = { navController.popBackStack() },
                     onBack = { navController.popBackStack() },
                 )
             }

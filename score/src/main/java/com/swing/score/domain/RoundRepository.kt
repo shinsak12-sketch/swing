@@ -20,7 +20,21 @@ object RoundRepository {
         _rounds.value = listOf(round) + _rounds.value
     }
 
+    fun update(round: Round) {
+        _rounds.value = _rounds.value.map { if (it.id == round.id) round else it }
+    }
+
+    fun delete(id: String) {
+        _rounds.value = _rounds.value.filterNot { it.id == id }
+    }
+
+    fun delete(ids: Set<String>) {
+        _rounds.value = _rounds.value.filterNot { it.id in ids }
+    }
+
     fun find(id: String): Round? = _rounds.value.firstOrNull { it.id == id }
+
+    fun bestRoundId(): String? = _rounds.value.minByOrNull { it.total }?.id
 
     fun newId(): String = "r${seq++}"
 
