@@ -2,6 +2,7 @@ package com.swing.score.ui.home
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,39 +18,39 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.swing.score.domain.Round
+import com.swing.score.domain.RoundRepository
 import com.swing.score.ui.components.ConvexCard
 import com.swing.score.ui.theme.FairwayDeep
 import com.swing.score.ui.theme.LocalScorePalette
 
-private data class RecentRound(
-    val course: String,
-    val detail: String,
-    val score: Int,
-    val toPar: Int,
-)
-
-private val sampleRounds = listOf(
-    RecentRound("소노펠리체CC 비발디파크", "2026.07.25 · WEST", 95, 23),
-    RecentRound("썬힐 골프클럽", "2026.04.25 · 힐→썬", 98, 26),
-    RecentRound("Pebble Beach GL", "2026.03.11 · 수기입력", 91, 19),
-)
-
-private val sampleTrend = listOf(103, 99, 104, 96, 100, 94, 98, 91)
-
 @Composable
-fun HomeScreen() {
+fun HomeScreen(
+    onOpenRound: (String) -> Unit,
+    onSeeAllRounds: () -> Unit,
+    onOpenStats: () -> Unit,
+) {
     val scroll = rememberScrollState()
+    val rounds by RoundRepository.rounds.collectAsState()
+
+    val average = rounds.map { it.total }.takeIf { it.isNotEmpty() }?.average()?.let { Math.round(it).toInt() }
+    val best = rounds.minOfOrNull { it.total }
+    val trend = rounds.map { it.total }.asReversed()
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -65,36 +66,38 @@ fun HomeScreen() {
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Text(
-                "이번 시즌 12 라운드",
+                "이번 시즌 ${rounds.size} 라운드",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-            Kpi(Modifier.weight(1f), "평균", "96")
-            Kpi(Modifier.weight(1f), "베스트", "89")
-            Kpi(Modifier.weight(1f), "핸디캡", "22.4")
+            Kpi(Modifier.weight(1f), "평균", average?.toString() ?: "-", onOpenStats)
+            Kpi(Modifier.weight(1f), "베스트", best?.toString() ?: "-", onOpenStats)
+            Kpi(Modifier.weight(1f), "핸디캡", "22.4", onOpenStats)
         }
 
-        ConvexCard(modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp)) {
-                PanelHeader("스코어 추이", "최근 8라운드")
-                Spacer(Modifier.height(10.dp))
-                Sparkline(
-                    values = sampleTrend,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(64.dp),
-                )
+        if (trend.size >= 2) {
+            ConvexCard(modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(14.dp)) {
+                    PanelHeader("스코어 추이", "최근 ${trend.size}라운드", onOpenStats)
+                    Spacer(Modifier.height(10.dp))
+                    Sparkline(
+                        values = trend,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(64.dp),
+                    )
+                }
             }
         }
 
         ConvexCard(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp)) {
-                PanelHeader("최근 라운드", "전체")
+                PanelHeader("최근 라운드", "전체", onSeeAllRounds)
                 Spacer(Modifier.height(4.dp))
-                sampleRounds.forEachIndexed { index, round ->
+                rounds.take(3).forEachIndexed { index, round ->
                     if (index > 0) {
                         Box(
                             Modifier
@@ -103,7 +106,7 @@ fun HomeScreen() {
                                 .background(MaterialTheme.colorScheme.outline),
                         )
                     }
-                    RoundRow(round)
+                    RoundRow(round) { onOpenRound(round.id) }
                 }
             }
         }
@@ -113,9 +116,13 @@ fun HomeScreen() {
 }
 
 @Composable
-private fun Kpi(modifier: Modifier, label: String, value: String) {
+private fun Kpi(modifier: Modifier, label: String, value: String, onClick: () -> Unit) {
     ConvexCard(modifier = modifier, shape = RoundedCornerShape(16.dp)) {
-        Column(Modifier.padding(horizontal = 10.dp, vertical = 12.dp)) {
+        Column(
+            Modifier
+                .clickable(onClick = onClick)
+                .padding(horizontal = 10.dp, vertical = 12.dp)
+        ) {
             Text(
                 label,
                 style = MaterialTheme.typography.labelSmall,
@@ -134,7 +141,7 @@ private fun Kpi(modifier: Modifier, label: String, value: String) {
 }
 
 @Composable
-private fun PanelHeader(title: String, action: String) {
+private fun PanelHeader(title: String, action: String, onAction: () -> Unit) {
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -149,16 +156,18 @@ private fun PanelHeader(title: String, action: String) {
             action,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable(onClick = onAction),
         )
     }
 }
 
 @Composable
-private fun RoundRow(round: RecentRound) {
+private fun RoundRow(round: Round, onClick: () -> Unit) {
     val palette = LocalScorePalette.current
     Row(
         Modifier
             .fillMaxWidth()
+            .clickable(onClick = onClick)
             .padding(vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(11.dp),
@@ -175,30 +184,30 @@ private fun RoundRow(round: RecentRound) {
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                round.score.toString(),
-                color = androidx.compose.ui.graphics.Color.White,
+                round.total.toString(),
+                color = Color.White,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.ExtraBold,
             )
         }
         Column(Modifier.weight(1f)) {
             Text(
-                round.course,
+                round.courseName,
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
             )
             Text(
-                round.detail,
+                "${round.dateLabel} · ${round.subtitle}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Text(
-            "+${round.toPar}",
+            if (round.toPar > 0) "+${round.toPar}" else round.toPar.toString(),
             fontSize = 14.sp,
             fontWeight = FontWeight.ExtraBold,
-            color = palette.bogey,
+            color = if (round.toPar > 0) palette.bogey else palette.positive,
         )
     }
 }
@@ -224,11 +233,7 @@ private fun Sparkline(values: List<Int>, modifier: Modifier) {
             moveTo(points.first().x, points.first().y)
             for (p in points.drop(1)) lineTo(p.x, p.y)
         }
-        drawPath(
-            path = path,
-            color = line,
-            style = Stroke(width = 6f, cap = StrokeCap.Round),
-        )
+        drawPath(path = path, color = line, style = Stroke(width = 6f, cap = StrokeCap.Round))
         drawCircle(color = endDot, radius = 8f, center = points.last())
     }
 }

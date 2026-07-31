@@ -1,5 +1,8 @@
 package com.swing.score.ui.entry
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -10,8 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -27,7 +30,19 @@ import androidx.compose.ui.unit.dp
 import com.swing.score.ui.theme.FairwayDeep
 
 @Composable
-fun EntryScreen() {
+fun EntryScreen(
+    onManual: () -> Unit,
+    onCapturePicked: () -> Unit,
+) {
+    val picker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            CaptureDraft.uri = uri
+            onCapturePicked()
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -55,6 +70,11 @@ fun EntryScreen() {
                 listOf(MaterialTheme.colorScheme.primary, FairwayDeep)
             ),
             contentColor = Color.White,
+            onClick = {
+                picker.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                )
+            },
         )
 
         BigChoice(
@@ -65,6 +85,7 @@ fun EntryScreen() {
                 listOf(Color(0xFF1B2420), Color(0xFF10160F))
             ),
             contentColor = Color.White,
+            onClick = onManual,
         )
 
         Text(
@@ -72,7 +93,9 @@ fun EntryScreen() {
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp),
         )
     }
 }
@@ -84,13 +107,14 @@ private fun BigChoice(
     desc: String,
     gradient: Brush,
     contentColor: Color,
+    onClick: () -> Unit,
 ) {
     Box(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(22.dp))
             .background(gradient)
-            .clickable { /* wired up in a later milestone */ }
+            .clickable(onClick = onClick)
             .padding(20.dp),
     ) {
         Column {

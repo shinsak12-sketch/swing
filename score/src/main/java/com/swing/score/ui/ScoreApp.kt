@@ -13,10 +13,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.swing.score.ui.detail.RoundDetailScreen
+import com.swing.score.ui.entry.EntryFormScreen
 import com.swing.score.ui.entry.EntryScreen
 import com.swing.score.ui.home.HomeScreen
 import com.swing.score.ui.navigation.TopDestination
@@ -27,27 +30,17 @@ import com.swing.score.ui.stats.StatsScreen
 fun ScoreApp() {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = backStackEntry?.destination?.hierarchy
+    val currentHierarchy = backStackEntry?.destination?.hierarchy
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-            ) {
+            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                 TopDestination.entries.forEach { dest ->
-                    val selected = currentRoute?.any { it.route == dest.route } == true
+                    val selected = currentHierarchy?.any { it.route == dest.route } == true
                     NavigationBarItem(
                         selected = selected,
-                        onClick = {
-                            navController.navigate(dest.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
+                        onClick = { navController.navigateToTab(dest.route) },
                         icon = { Icon(dest.icon, contentDescription = dest.label) },
                         label = { Text(dest.label) },
                         colors = NavigationBarItemDefaults.colors(
@@ -67,10 +60,48 @@ fun ScoreApp() {
             startDestination = TopDestination.Home.route,
             modifier = Modifier.padding(innerPadding),
         ) {
-            composable(TopDestination.Home.route) { HomeScreen() }
-            composable(TopDestination.Rounds.route) { RoundsScreen() }
-            composable(TopDestination.Entry.route) { EntryScreen() }
+            composable(TopDestination.Home.route) {
+                HomeScreen(
+                    onOpenRound = { id -> navController.navigate("detail/$id") },
+                    onSeeAllRounds = { navController.navigateToTab(TopDestination.Rounds.route) },
+                    onOpenStats = { navController.navigateToTab(TopDestination.Stats.route) },
+                )
+            }
+            composable(TopDestination.Rounds.route) {
+                RoundsScreen(onOpenRound = { id -> navController.navigate("detail/$id") })
+            }
+            composable(TopDestination.Entry.route) {
+                EntryScreen(
+                    onManual = { navController.navigate("form/manual") },
+                    onCapturePicked = { navController.navigate("form/capture") },
+                )
+            }
             composable(TopDestination.Stats.route) { StatsScreen() }
+
+            composable("detail/{id}") { entry ->
+                val id = entry.arguments?.getString("id").orEmpty()
+                RoundDetailScreen(roundId = id, onBack = { navController.popBackStack() })
+            }
+            composable("form/{mode}") { entry ->
+                val isCapture = entry.arguments?.getString("mode") == "capture"
+                EntryFormScreen(
+                    isCapture = isCapture,
+                    onSaved = { id ->
+                        navController.navigate("detail/$id") {
+                            popUpTo(TopDestination.Home.route)
+                        }
+                    },
+                    onBack = { navController.popBackStack() },
+                )
+            }
         }
+    }
+}
+
+private fun NavHostController.navigateToTab(route: String) {
+    navigate(route) {
+        popUpTo(graph.findStartDestination().id) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
     }
 }
