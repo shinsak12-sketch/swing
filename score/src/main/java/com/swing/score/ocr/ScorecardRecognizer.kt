@@ -10,12 +10,12 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 
 /**
- * Result of reading a score-card screenshot.
- * [pars] and [strokes] are aligned per hole (9 or 18). Everything is a
- * best effort — [checksumOk] tells whether the per-hole sum matched a
- * detected subtotal, so the UI can flag low-confidence reads for review.
+ * Result of reading a score-card screenshot. [pars]/[strokes] are aligned per
+ * hole (9 or 18). [checksumOk] means a detected subtotal matched the per-hole
+ * sum, so the UI can flag low-confidence reads for review.
  */
 data class Recognition(
     val pars: List<Int>,
@@ -24,9 +24,11 @@ data class Recognition(
     val success: Boolean,
 )
 
-private class NumRow(val cy: Int, val values: List<Int>, val boxes: List<Rect>)
+private class NumRow(val cy: Int, val values: List<Int>)
 
 object ScorecardRecognizer {
+
+    private val DEFAULT_PARS = listOf(4, 4, 3, 4, 5, 4, 4, 3, 5) + listOf(4, 4, 3, 4, 5, 4, 4, 3, 5)
 
     suspend fun recognize(context: Context, uri: Uri): Recognition = withContext(Dispatchers.Default) {
         try {
@@ -35,82 +37,88 @@ object ScorecardRecognizer {
             val text = Tasks.await(client.process(image))
             parse(text)
         } catch (t: Throwable) {
-            Recognition(emptyList(), emptyList(), checksumOk = false, success = false)
+            fail()
         }
     }
 
-    /**
-     * Strategy: collect every integer token with its position, group tokens
-     * into horizontal rows, then look for the recurring "9 numbers + subtotal"
-     * shape a score-card uses. The PAR row (values mostly 3..5) anchors each
-     * IN/OUT block; the following numeric row is the player's per-hole line,
-     * which score-cards render relative to par — so strokes = par + value,
-     * unless the values already look like raw strokes.
-     */
     private fun parse(text: Text): Recognition {
-        val tokens = ArrayList<Pair<Int, Rect>>() // value, box
+        val tokens = ArrayList<Pair<Int, Rect>>()
         for (block in text.textBlocks) {
             for (line in block.lines) {
                 for (el in line.elements) {
-                    val raw = el.text.trim()
-                    val n = raw.toIntOrNull() ?: continue
+                    val n = el.text.trim().toIntOrNull() ?: continue
                     val box = el.boundingBox ?: continue
-                    if (n in 0..19) tokens.add(n to box)
+                    if (n in 0..199) tokens.add(n to box)
                 }
             }
         }
-        if (tokens.size < 12) return fail()
+        if (tokens.size < 10) return fail()
 
         val rows = clusterRows(tokens)
-        // Candidate score rows: 8+ values (9 holes, maybe with subtotal/label noise).
-        val scoreRows = rows.filter { it.values.size >= 8 }
-        if (scoreRows.isEmpty()) return fail()
+        // Rows that carry a run of per-hole cells.
+        val candidates = rows.filter { it.values.count { v -> v in 0..15 } >= 8 }
+        if (candidates.isEmpty()) return fail()
 
-        val parRows = scoreRows.filter { row ->
-            val nine = row.values.take(9)
-            nine.count { it in 3..5 } >= 6
+        // A PAR row: nine values in 3..5-ish, summing to a 9-hole par (~36).
+        val parRows = candidates.filter { row ->
+            val nine = row.values.filter { it in 0..15 }.take(9)
+            nine.size >= 9 && nine.sum() in 30..41 && nine.count { it in 3..5 } >= 6
         }
 
         val pars = ArrayList<Int>()
         val strokes = ArrayList<Int>()
-        var checksumHits = 0
-        var checksumTotal = 0
+        var checkTotal = 0
+        var checkHit = 0
 
         for (parRow in parRows.take(2)) {
-            val parVals = parRow.values.take(9)
+            val parVals = parRow.values.filter { it in 0..15 }.take(9)
             if (parVals.size < 9) continue
-            // The player's row is the closest score row below the par row.
-            val playerRow = scoreRows
+            val player = candidates
                 .filter { it !== parRow && it.cy > parRow.cy }
                 .minByOrNull { it.cy - parRow.cy } ?: continue
-
-            val playerVals = playerRow.values.take(9)
+            val playerVals = player.values.filter { it in 0..15 }.take(9)
             if (playerVals.size < 9) continue
 
-            // Relative (values small, <= par) vs raw strokes.
-            val looksRelative = playerVals.zip(parVals).all { (v, p) -> v <= p + 1 } &&
-                playerVals.sum() < parVals.sum()
-            val holeStrokes = if (looksRelative) {
-                playerVals.mapIndexed { i, v -> parVals[i] + v }
-            } else {
-                playerVals
-            }
-
-            // Checksum against a subtotal token, if the row carries one.
-            val subtotal = playerRow.values.getOrNull(9)
+            val chosen = interpret(parVals, playerVals, player.values.firstOrNull { it in 30..70 })
+            val subtotal = player.values.firstOrNull { it in 30..70 }
             if (subtotal != null) {
-                checksumTotal++
-                if (subtotal == holeStrokes.sum() || subtotal == playerVals.sum()) checksumHits++
+                checkTotal++
+                if (subtotal == chosen.sum()) checkHit++
             }
-
             pars.addAll(parVals)
-            strokes.addAll(holeStrokes)
+            strokes.addAll(chosen)
         }
 
-        if (pars.isEmpty() || strokes.size != pars.size) return fail()
+        if (pars.isNotEmpty() && strokes.size == pars.size) {
+            val ok = checkTotal > 0 && checkHit == checkTotal
+            return Recognition(pars, strokes, ok, true)
+        }
 
-        val checksumOk = checksumTotal > 0 && checksumHits == checksumTotal
-        return Recognition(pars = pars, strokes = strokes, checksumOk = checksumOk, success = true)
+        // Fallback: no clean PAR row — prefill the strongest cell row so the
+        // user has something to correct rather than a blank failure.
+        val best = candidates.maxByOrNull { it.values.count { v -> v in 0..15 } } ?: return fail()
+        val vals = best.values.filter { it in 0..15 }
+        val n = if (vals.size >= 18) 18 else 9
+        if (vals.size < n) return fail()
+        val cells = vals.take(n)
+        val defPars = DEFAULT_PARS.take(n)
+        val looksRelative = cells.any { it == 0 } || cells.sorted()[cells.size / 2] <= 2
+        val guessed = if (looksRelative) cells.mapIndexed { i, v -> defPars[i] + v } else cells
+        return Recognition(defPars, guessed, checksumOk = false, success = true)
+    }
+
+    /** Score-cards render the player line relative to par; detect and convert. */
+    private fun interpret(pars: List<Int>, values: List<Int>, subtotal: Int?): List<Int> {
+        val asRelative = pars.zip(values).map { (p, v) -> p + v }
+        val asRaw = values
+        return when {
+            subtotal == asRelative.sum() -> asRelative
+            subtotal == asRaw.sum() -> asRaw
+            // Values at or below par (with the odd birdie) read as relative.
+            values.zip(pars).count { (v, p) -> v <= p } >= 7 && asRelative.sum() in 30..70 -> asRelative
+            asRaw.sum() in 30..70 -> asRaw
+            else -> asRelative
+        }
     }
 
     private fun clusterRows(tokens: List<Pair<Int, Rect>>): List<NumRow> {
@@ -124,7 +132,7 @@ object ScorecardRecognizer {
         for (tk in sorted) {
             val cy = tk.second.centerY()
             val row = rows.lastOrNull()
-            if (row != null && kotlin.math.abs(cy - row.last().second.centerY()) <= threshold) {
+            if (row != null && abs(cy - row.last().second.centerY()) <= threshold) {
                 row.add(tk)
             } else {
                 rows.add(mutableListOf(tk))
@@ -135,7 +143,6 @@ object ScorecardRecognizer {
             NumRow(
                 cy = ordered.map { it.second.centerY() }.average().toInt(),
                 values = ordered.map { it.first },
-                boxes = ordered.map { it.second },
             )
         }
     }

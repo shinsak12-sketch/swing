@@ -115,9 +115,10 @@ fun ScoreApp() {
 }
 
 private fun NavHostController.navigateToTab(route: String) {
+    // Tabs always reset back to the home root, clearing any detail/form pushed
+    // on top. Predictable: tapping a tab always lands on that tab's screen.
     navigate(route) {
-        popUpTo(graph.findStartDestination().id) { saveState = true }
+        popUpTo(TopDestination.Home.route) { inclusive = false }
         launchSingleTop = true
-        restoreState = true
     }
 }
